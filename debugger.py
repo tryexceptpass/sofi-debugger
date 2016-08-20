@@ -138,7 +138,7 @@ def display(event, interface):
             yield from asyncio.sleep(1)
         else:
             print("APP: dispatching")
-            while !appq.empty():
+            while not appq.empty():
                 interface.dispatch(appq.get())
             return
 
