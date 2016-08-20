@@ -1,6 +1,6 @@
 from sofi.app import Sofi
-from sofi import Container, View, Row, Column
-from sofi import Panel, Div, Bold, Sample, Paragraph
+from sofi import Container, View, Row, Column, Span, Div, Panel
+from sofi import Bold, Sample, Paragraph, ButtonToolbar, Button
 
 import asyncio
 import json
@@ -64,15 +64,22 @@ def trace_lines(frame, event, arg):
     print("f_locals " + str(frame.f_locals))
     print("f_trace " + str(frame.f_trace))
 
-    p = Panel(heading=True)
-    p.setheading(Sample(str(co.co_filename) + " - " + co.co_name + "() #" + str(frame.f_lineno)))
-    p.addelement(Paragraph(Sample(str(frame.f_locals))))
-    p.addelement(Paragraph())
-    p.addelement(str(source))
-    col = Column('md', 4)
-    col.addelement(p)
 
-    app.processor.dispatch({'name': 'append', 'html': str(col), 'selector': '#xyz'})
+
+    app.processor.dispatch({'name': 'replace',
+                            'html': str(Sample(str(co.co_filename) + " - " + co.co_name + "() #" + str(frame.f_lineno))),
+                            'selector': '#code-panel-title'})
+    app.processor.dispatch({'name': 'replace',
+                            'html': str(Sample(str(frame.f_locals)))  + str(source),
+                            'selector': '#code-panel-body'})
+
+    # while 1:
+    #     if fwd.next:
+    #         break
+
+    time.sleep(2)
+
+    # fwd.next = False
 
 def trace_calls(frame, event, arg):
     if event != 'call':
@@ -92,13 +99,30 @@ def abc(x):
     y = x * 2
     print("ABC: " + str(x + y))
 
+def fwd():
+    fwd.next = True
+
 @asyncio.coroutine
 def main(event, interface):
     print("MAIN")
     v = View()
     c = Container()
-    c.addelement(Row(ident='xyz'))
+    r = Row()
 
+    tb = ButtonToolbar(cl="pull-right")
+    tb.addelement(Button("Next", ident="code-next-button"))
+
+    title = Span("", ident="code-panel-title")
+
+    p = Panel(heading=True, ident="code")
+    p.setheading(str(title) + str(tb))
+    p.addelement(Paragraph())
+
+    col = Column('lg', 8)
+    col.addelement(p)
+    r.addelement(col)
+
+    c.addelement(r)
     v.addelement(c)
 
     return { 'name': 'init', 'html': str(v) }
@@ -107,10 +131,12 @@ def main(event, interface):
 def load(event, interface):
     print("LOADED")
 
+    fwd.next = False
 
     sys.settrace(trace_calls)
     abc(23)
 
+    app.register('click', fwd, selector="#code-next-button")
 
     return
 
