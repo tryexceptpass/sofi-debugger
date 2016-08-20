@@ -11,6 +11,8 @@ from datetime import datetime
 import inspect
 import sys
 
+import multiprocessing
+
 # Tue Jun 07 23:05:55 +0000 2016
 dateformat = "%a %b %d %H:%M:%S %z %Y"
 
@@ -19,7 +21,6 @@ def trace_lines(frame, event, arg):
         return
 
     co = frame.f_code
-
 
     source = inspect.getsourcelines(co)[0]
     for index, item  in enumerate(source):
@@ -65,21 +66,16 @@ def trace_lines(frame, event, arg):
     print("f_trace " + str(frame.f_trace))
 
 
+    trace_lines.dbgq.get()
 
-    app.processor.dispatch({'name': 'replace',
-                            'html': str(Sample(str(co.co_filename) + " - " + co.co_name + "() #" + str(frame.f_lineno))),
-                            'selector': '#code-panel-title'})
-    app.processor.dispatch({'name': 'replace',
-                            'html': str(Sample(str(frame.f_locals)))  + str(source),
-                            'selector': '#code-panel-body'})
+    trace_lines.appq.put({'name': 'replace',
+                          'html': str(Sample(str(co.co_filename) + " - " + co.co_name + "() #" + str(frame.f_lineno))),
+                          'selector': '#code-panel-title'})
+    trace_lines.appq.put({'name': 'replace',
+                          'html': str(Sample(str(frame.f_locals)))  + str(source),
+                          'selector': '#code-panel-body'})
 
-    # while 1:
-    #     if fwd.next:
-    #         break
 
-    time.sleep(2)
-
-    # fwd.next = False
 
 def trace_calls(frame, event, arg):
     if event != 'call':
@@ -99,8 +95,6 @@ def abc(x):
     y = x * 2
     print("ABC: " + str(x + y))
 
-def fwd():
-    fwd.next = True
 
 @asyncio.coroutine
 def main(event, interface):
@@ -131,18 +125,42 @@ def main(event, interface):
 def load(event, interface):
     print("LOADED")
 
-    fwd.next = False
+    p.start()
 
+    app.register('click', step, selector="#code-next-button")
+
+
+@asyncio.coroutine
+def display(event, interface):
+    while True:
+        if appq.empty():
+            print("APP: waiting")
+            yield from asyncio.sleep(1)
+        else:
+            print("APP: dispatching")
+            while !appq.empty():
+                interface.dispatch(appq.get())
+            return
+
+@asyncio.coroutine
+def step(event, interface):
+    print("STEP")
+    dbgq.put(1)
+    yield from display(event, interface)
+
+def debug(appq, dbgq, fn, args):
+    trace_lines.dbgq = dbgq
+    trace_lines.appq = appq
     sys.settrace(trace_calls)
-    abc(23)
+    fn(args)
 
-    app.register('click', fwd, selector="#code-next-button")
+if __name__ == '__main__':
+    dbgq = multiprocessing.Queue()
+    appq = multiprocessing.Queue()
 
-    return
+    app = Sofi()
+    app.register('init', main)
+    app.register('load', load)
 
-
-app = Sofi()
-app.register('init', main)
-app.register('load', load)
-
-app.start()
+    p = multiprocessing.Process(target=debug, args=(appq, dbgq, abc, (23)))
+    app.start()
