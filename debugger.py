@@ -42,7 +42,7 @@ def trace_lines(frame, event, arg):
     if cmd == "stop":
         raise StopExecution()
     elif cmd == 'over':
-        return 
+        return trace_calls
 
     # print("CODE")
     # print("co_argcount " + str(co.co_argcount))
