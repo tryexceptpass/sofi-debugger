@@ -24,7 +24,7 @@ def trace_lines(frame, event, arg):
     co = frame.f_code
     source = inspect.getsourcelines(co)[0]
 
-    trace_lines.appq.put({ "co": { "file": co.co_filename,
+    trace_lines.applicationq.put({ "co": { "file": co.co_filename,
                                    "name": co.co_name,
                                    "lineno": str(frame.f_lineno)
                                    },
@@ -36,7 +36,10 @@ def trace_lines(frame, event, arg):
                            'trace': 'line'
                           })
 
-    cmd = trace_lines.dbgq.get()
+    cmd = trace_lines.debugq.get()
+    # if event == "return":
+    #     return trace_calls
+
     if cmd == "step":
         return trace_lines
     if cmd == "stop":
@@ -83,11 +86,11 @@ def trace_calls(frame, event, arg):
     func_name = co.co_name
 
     # Here is where we should control major debug flow
-    print("FUNCTION CALL", func_name)
-    if func_name == 'abc':
+    # print("FUNCTION CALL", func_name)
+    if func_name in ['sample', 'xyz']:
         source = inspect.getsourcelines(co)[0]
 
-        trace_lines.appq.put({ "co": { "file": co.co_filename,
+        trace_lines.applicationq.put({ "co": { "file": co.co_filename,
                                        "name": co.co_name,
                                        "lineno": str(frame.f_lineno)
                                        },
@@ -101,7 +104,7 @@ def trace_calls(frame, event, arg):
 
         print('Call to %s on line %s of %s' % (func_name, frame.f_lineno, co.co_filename))
 
-        cmd = trace_lines.dbgq.get()
+        cmd = trace_lines.debugq.get()
 
         if cmd == 'step':
             try:
@@ -113,20 +116,22 @@ def trace_calls(frame, event, arg):
 
     return
 
-def abc(x):
-    x = x + 1
+def sample(a, b):
+    x = a + b
     y = x * 2
-    print("ABC: " + str(x + y))
+    print('Sample: ' + str(y))
 
+def xyz(a):
+    print("XYZ:" + str(a))
 
 @asyncio.coroutine
 def main(event):
     print("MAIN")
     v = View()
     c = Container()
-    r = Row()
+    r = Row(style="padding-top:20px;")
 
-    tb = ButtonToolbar(cl="pull-right")
+    tb = ButtonToolbar(cl="pull-right", style="margin-top:-7px;")
     tb.addelement(Button("Next", ident="code-next-button"))
     tb.addelement(Button("Stop", ident="code-stop-button"))
     tb.addelement(Button("Step Over", ident="code-over-button"))
@@ -154,16 +159,16 @@ def load(event):
     app.register('click', stop, selector="#code-stop-button")
     app.register('click', over, selector="#code-over-button")
 
-    yield from display()
+    # yield from display()
 
 @asyncio.coroutine
 def display():
     while True:
-        if appq.empty():
+        if applicationq.empty():
             yield from asyncio.sleep(1)
         else:
-            while not appq.empty():
-                draw = appq.get()
+            while not applicationq.empty():
+                draw = applicationq.get()
                 if 'trace' in draw:
                     if draw['trace'] == 'call':
                         app.text("#code-next-button", "Step Into")
@@ -189,7 +194,7 @@ def formatsource(frame):
             d.style ='margin-left:15px;'
 
         if index == frame['lineno'] - frame['firstlineno']:
-            d.addelement(Bold('>', style="color:red"))
+            d.addelement(Bold('> ', style="color:red"))
 
         d.addelement(Sample(item.replace("\n", "")))
         frame['source'][index] = str(d)
@@ -198,22 +203,22 @@ def formatsource(frame):
 
 @asyncio.coroutine
 def step(event):
-    dbgq.put("step")
+    debugq.put("step")
     yield from display()
 
 @asyncio.coroutine
 def stop(event):
-    dbgq.put("stop")
+    debugq.put("stop")
 
 @asyncio.coroutine
 def over(event):
-    dbgq.put("over")
+    debugq.put("over")
 
-def debug(appq, dbgq, fn, args):
-    trace_lines.dbgq = dbgq
-    trace_lines.appq = appq
+def debug(applicationq, debugq, fn, args):
+    trace_lines.debugq = debugq
+    trace_lines.applicationq = applicationq
     sys.settrace(trace_calls)
-    fn(args)
+    fn(*args)
 
 if __name__ == '__main__':
 
@@ -221,7 +226,7 @@ if __name__ == '__main__':
     app.register('init', main)
     app.register('load', load)
 
-    dbgq = multiprocessing.Queue()
-    appq = multiprocessing.Queue()
-    p = multiprocessing.Process(target=debug, args=(appq, dbgq, abc, (23)))
+    debugq = multiprocessing.Queue()
+    applicationq = multiprocessing.Queue()
+    p = multiprocessing.Process(target=debug, args=(applicationq, debugq, sample, (2, 3)))
     app.start()
